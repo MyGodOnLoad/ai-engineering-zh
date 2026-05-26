@@ -66,9 +66,9 @@ class TestEndToEnd(unittest.TestCase):
 
     def test_loss_finite_and_no_nan(self):
         losses = self.results[0]["losses"]
-        for s, l in enumerate(losses):
-            self.assertFalse(l != l, msg=f"NaN at step {s}")
-            self.assertFalse(l == float("inf"), msg=f"inf at step {s}")
+        for s, loss in enumerate(losses):
+            self.assertFalse(loss != loss, msg=f"NaN at step {s}")
+            self.assertFalse(loss == float("inf"), msg=f"inf at step {s}")
 
 
 if __name__ == "__main__":

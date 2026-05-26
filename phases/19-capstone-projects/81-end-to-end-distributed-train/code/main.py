@@ -272,7 +272,10 @@ def load_sharded(src_dir: str, expected_world_size: int) -> list:
     src = Path(src_dir)
     manifest = json.loads((src / "manifest.json").read_text())
     if manifest["world_size"] != expected_world_size:
-        raise RuntimeError(f"world_size mismatch")
+        raise RuntimeError(
+            f"world_size mismatch: manifest={manifest['world_size']}, "
+            f"expected={expected_world_size}"
+        )
     per_rank = [None] * manifest["world_size"]
     for entry in manifest["shards"]:
         payload = (src / entry["path"]).read_bytes()
@@ -362,31 +365,36 @@ def run_e2e(world_size: int = WORLD_SIZE, steps: int = STEPS) -> dict:
     ckpt_dir = os.path.join(workdir, f"step_{CHECKPOINT_STEP:04d}")
     iface = _loopback_iface()
     procs = []
+    cleanup_workdir = False
     try:
-        for r in range(world_size):
-            p = ctx.Process(
-                target=_train_worker,
-                args=(r, world_size, init_file, iface, ckpt_dir, steps, out_queue),
-            )
-            p.start()
-            procs.append(p)
-        results = {}
-        for _ in range(world_size):
-            rank, losses, norm, shard_bytes, master_at_ckpt = out_queue.get(timeout=180)
-            results[rank] = {
-                "losses": losses,
-                "norm": norm,
-                "shard_bytes": shard_bytes,
-                "master_at_ckpt": master_at_ckpt,
-            }
+        try:
+            for r in range(world_size):
+                p = ctx.Process(
+                    target=_train_worker,
+                    args=(r, world_size, init_file, iface, ckpt_dir, steps, out_queue),
+                )
+                p.start()
+                procs.append(p)
+            results = {}
+            for _ in range(world_size):
+                rank, losses, norm, shard_bytes, master_at_ckpt = out_queue.get(timeout=180)
+                results[rank] = {
+                    "losses": losses,
+                    "norm": norm,
+                    "shard_bytes": shard_bytes,
+                    "master_at_ckpt": master_at_ckpt,
+                }
+        except Exception:
+            cleanup_workdir = True
+            raise
+    finally:
         for p in procs:
             p.join(timeout=5)
             if p.is_alive():
                 p.terminate()
                 p.join(timeout=2)
-    except Exception:
-        shutil.rmtree(workdir, ignore_errors=True)
-        raise
+        if cleanup_workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
     return {"workdir": workdir, "ckpt_dir": ckpt_dir, "results": results}
 
 
@@ -416,15 +424,15 @@ def main() -> int:
     ckpt_dir = out["ckpt_dir"]
     print(f"\n{'step':<6}{'rank0_loss':<14}")
     rank0_losses = results[0]["losses"]
-    for s, l in enumerate(rank0_losses):
-        print(f"{s:<6}{l:<14.6f}")
+    for s, loss in enumerate(rank0_losses):
+        print(f"{s:<6}{loss:<14.6f}")
     norms = [results[r]["norm"] for r in range(WORLD_SIZE)]
-    print(f"\nfinal param norm (must agree across ranks):")
+    print("\nfinal param norm (must agree across ranks):")
     for r in range(WORLD_SIZE):
         print(f"  rank {r}: {norms[r]:.6f}")
     norm_drift = max(norms) - min(norms)
     print(f"  drift across ranks: {norm_drift:.2e}")
-    print(f"\nper-rank optimiser memory (ZeRO-1 shard, bytes):")
+    print("\nper-rank optimiser memory (ZeRO-1 shard, bytes):")
     for r in range(WORLD_SIZE):
         print(f"  rank {r}: {results[r]['shard_bytes']}")
     expected_zero = (total_params + (-total_params) % WORLD_SIZE) // WORLD_SIZE * 4 * 3

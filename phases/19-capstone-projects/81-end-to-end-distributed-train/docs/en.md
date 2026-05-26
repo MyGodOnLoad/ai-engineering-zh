@@ -1,6 +1,6 @@
 # End-to-End Distributed Training
 
-> Lessons 76 through 80 each built one piece. This is the assembly: a tiny GPT trained across 4 simulated ranks with DDP for gradient sync, ZeRO-1 for optimiser-state sharding, and a sharded checkpoint at the halfway mark and at the end. The demo runs 20 steps, self-terminates, prints a loss curve plus a memory profile, and writes a resumable checkpoint.
+> Lessons 76 through 80 each built one piece. This is the assembly: a tiny GPT trained across 4 simulated ranks with DDP for gradient sync, ZeRO-1 for optimiser-state sharding, and a sharded checkpoint at the halfway mark. The demo runs 20 steps, self-terminates, prints a loss curve plus a memory profile, and writes a resumable checkpoint.
 
 **Type:** Build
 **Languages:** Python
@@ -10,7 +10,7 @@
 ## Learning Objectives
 
 - Compose DDP (lesson 77) plus ZeRO-1 (lesson 78) plus sharded checkpoints (lesson 80) into one training loop.
-- Train a 4-layer transformer language model on a small synthetic corpus for 20 steps across 4 simulated ranks.
+- Train a 2-layer transformer language model on a small synthetic corpus for 20 steps across 4 simulated ranks.
 - Print a per-step loss table, a per-rank memory profile, and a checkpoint manifest that resumes byte-equal on the same world size.
 - Defend the composition: each piece is independently testable in earlier lessons and this lesson proves they compose.
 
@@ -29,12 +29,12 @@ flowchart TB
   C --> D[ZeRO-1 step: reduce_scatter grads + Adam on shard + allgather params]
   D --> E[at step 10: save sharded checkpoint]
   E --> F[continue to step 20]
-  F --> G[final checkpoint + memory profile + exit 0]
+  F --> G[memory profile + resume verify + exit 0]
 ```
 
 ### The mini GPT
 
-The model is small on purpose: 4 transformer blocks, hidden dim 64, 4 attention heads, vocab 256, sequence length 32. About 80K parameters. Big enough to expose every wiring decision (rotary embeddings would still attach; multi-head attention runs the standard masked path; LayerNorm has weights to sync). Small enough that 20 steps on 4 CPU ranks finish in under a minute.
+The model is small on purpose: 2 transformer blocks, embed dim 32, 4 attention heads, vocab 64, sequence length 16, batch 4. A few thousand parameters. Big enough to exercise every wiring decision (multi-head attention runs the standard masked path; LayerNorm has weights to sync; the LM head is a separate linear projection back to the vocab). Small enough that 20 steps on 4 CPU ranks finish in seconds.
 
 ### The composition rules
 
@@ -49,7 +49,7 @@ The loop does not know about reduce_scatter or rendezvous files. The ZeRO and ch
 
 ### Why a tiny GPT and not just an MLP
 
-The MLP from lesson 77 was sufficient to verify gradient sync. A tiny GPT adds three things: shared weights across layers (no, but the embedding does tie to lm_head in real GPT), softmax+cross-entropy as the loss (more numerical edge cases than MSE), and an asymmetric forward (embeddings then attention then MLP per layer). Sticking with an MLP for the capstone would hide whether the composition handles LayerNorm running stats or the embedding layer's grad shape correctly.
+The MLP from lesson 77 was sufficient to verify gradient sync. A tiny GPT adds three things: a separate LM head over the vocab (in this lesson, untied for clarity; full GPT typically ties the head to the token embedding), softmax+cross-entropy as the loss (more numerical edge cases than MSE), and an asymmetric forward (embeddings then attention then MLP per layer). Sticking with an MLP for the capstone would hide whether the composition handles LayerNorm or the embedding layer's grad shape correctly.
 
 ### Self-terminating means exit 0
 
@@ -59,10 +59,10 @@ The loop runs a fixed 20 steps and exits. No `while True`, no human intervention
 
 `code/main.py` implements:
 
-- `MiniGPT`: 4-layer transformer with masked self-attention and a tied embedding+head, ~80K params.
-- `make_synthetic_corpus(seed, vocab, n_total, seq_len)`: deterministic next-token-prediction data.
-- `_train_worker`: spawned per rank; broadcasts init params, runs the loop, calls ZeRO step, writes checkpoint at step 10.
-- `verify_resume`: after the main run, spawns a fresh 4-rank worker pool that loads the step-10 checkpoint and asserts byte-equal parameter shards.
+- `MiniGPT`: 2-layer transformer with masked self-attention and a separate LM head.
+- `make_corpus(seed, total_tokens)`: deterministic next-token-prediction data.
+- `_train_worker`: spawned per rank; broadcasts init params, runs the loop, calls ZeRO step, writes the sharded checkpoint at step 10.
+- `verify_resume`: after the main run, reloads the step-10 checkpoint in-process and asserts the saved master shards match the in-memory snapshot byte-for-byte.
 - `main`: orchestrates the whole demo, prints the loss table, the memory profile, and the verification result.
 
 Run it:
