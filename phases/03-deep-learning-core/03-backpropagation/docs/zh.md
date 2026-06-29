@@ -1,11 +1,16 @@
 ---
 title: 反向传播从零实现
-tags: [技术/人工智能, 技术/算法, 技术/Python, 类型/tutorial, 状态/进行中]
+tags:
+  - 技术/人工智能
+  - 技术/算法
+  - 技术/Python
+  - 类型/tutorial
+  - 状态/进行中
 created: 2026-06-29
 modified: 2026-06-29
 category: 00-Inbox/10-Projects
 type: tutorial
-source: "[[AI Engineering 学习索引]] Phase 3-03"
+source: "[[20 Sources/ai-engineering-from-scratch/phases/03-deep-learning-core/03-backpropagation/docs/en|03-backpropagation]]"
 ---
 # 反向传播从零实现
 
@@ -40,10 +45,15 @@ source: "[[AI Engineering 学习索引]] Phase 3-03"
 
 每次前向传播构建一个图。每个节点是一个操作（乘、加、sigmoid）。每条边前向携带值，反向携带梯度。
 
-```
-    x ----→ [*] ----z1----→ [+] ----z2----→ [sigmoid] ----a----→ [Loss]
-    w ----→                      ↑                               ↑
-    b --------------------------/                          target
+```mermaid
+graph LR
+    x["x"] --> mul["*"]
+    w["w"] --> mul
+    mul -- "z1 = w*x" --> add["+"]
+    b["b"] --> add
+    add -- "z2 = z1 + b" --> sig["sigmoid"]
+    sig -- "a = sigmoid(z2)" --> loss["Loss"]
+    y["target"] --> loss
 ```
 
 前向传播：值从左向右流动。x 和 w 产生 z1 = w*x。加上 b 得到 z2。sigmoid 给出激活值 a。用损失函数将 a 与目标比较。
@@ -51,6 +61,32 @@ source: "[[AI Engineering 学习索引]] Phase 3-03"
 反向传播：梯度从右向左流动。从 dL/da 开始。乘以 da/dz2（sigmoid 导数）。得到 dL/dz2。拆分为 dL/db 和 dL/dz1。然后 dL/dw = dL/dz1 * x，dL/dx = dL/dz1 * w。
 
 每个节点在反向传播中只有一个任务：接收来自上方的梯度，乘以其局部导数，向下传递。
+
+```mermaid
+graph TB
+    subgraph Forward["前向传播"]
+        direction LR
+        f1["输入 x"] --> f2["z = Wx + b"]
+        f2 --> f3["a = sigmoid(z)"]
+        f3 --> f4["Loss = (a - y)^2"]
+    end
+    subgraph Backward["反向传播"]
+        direction RL
+        b4["dL/dL = 1"] --> b3["dL/da = 2(a-y)"]
+        b3 --> b2["dL/dz = dL/da * a(1-a)"]
+        b2 --> b1["dL/dW = dL/dz * x
+dL/db = dL/dz"]
+    end
+    Forward --> Backward
+```
+
+```mermaid
+graph RL
+    L["Loss"] -- "dL/da3" --> L3["Layer 3\na3 = sigmoid(z3)"]
+    L3 -- "dL/dz3 = dL/da3 * sigmoid'(z3)" --> L2["Layer 2\na2 = sigmoid(z2)"]
+    L2 -- "dL/dz2 = dL/da2 * sigmoid'(z2)" --> L1["Layer 1\na1 = sigmoid(z1)"]
+    L1 -- "dL/dz1 = dL/da1 * sigmoid'(z1)" --> I["Input"]
+```
 
 ### 梯度消失
 
