@@ -18,7 +18,7 @@ related:
 
 ## 学习目标
 
-- 构建一个最小 autograd 引擎（Value 类），记录运算并通过反向模式自动微分计算梯度
+- 构建一个最小 autograd 引擎（[[Value 类与 Autograd 引擎 | Value 类]]），记录运算并通过反向模式自动微分计算梯度
 - 使用拓扑排序实现计算图的前向和反向传播
 - 仅用手写的 autograd 引擎构建并训练一个多层感知机解决 XOR 问题
 - 通过数值有限差分进行梯度检验，验证自动微分的正确性
@@ -70,7 +70,7 @@ dy/dx = f'(g(h(x))) * g'(h(x)) * h'(x)
 
 **前向传播（计算值）：**
 
-`mermaid
+```mermaid
 graph TD
     x1["x1 = 2"] --> mul["* （乘法）"]
     x2["x2 = 3"] --> mul
@@ -78,18 +78,18 @@ graph TD
     b["b = 1"] --> add
     add -->|"c = 7"| relu["relu"]
     relu -->|"y = 7"| y["输出 y"]
-`
+```
 
 **反向传播（计算梯度）：**
 
-`mermaid
+```mermaid
 graph TD
     dy["dy/dy = 1"] -->|"relu'(c)=1 因为 c>0"| dc["dy/dc = 1"]
     dc -->|"dc/da = 1"| da["dy/da = 1"]
     dc -->|"dc/db = 1"| db["dy/db = 1"]
     da -->|"da/dx1 = x2 = 3"| dx1["dy/dx1 = 3"]
     da -->|"da/dx2 = x1 = 2"| dx2["dy/dx2 = 2"]
-`
+```
 
 反向传播在每个节点应用链式法则，将梯度从输出传播回输入。
 
@@ -156,12 +156,12 @@ equires_grad=True 时记录运算，在调用 .backward() 时计算梯度。
 
 当你写 PyTorch 代码时：
 
-`python
+```python
 x = torch.tensor(2.0, requires_grad=True)
 y = x ** 2 + 3 * x + 1
 y.backward()
 print(x.grad)  # 7.0 = 2*x + 3 = 2*2 + 3
-`
+```
 
 PyTorch 内部：
 
@@ -178,7 +178,7 @@ equires_grad=True
 
 ### 步骤 1：Value 类
 
-`python
+```python
 class Value:
     def __init__(self, data, children=(), op=''):
         self.data = data
@@ -189,13 +189,13 @@ class Value:
 
     def __repr__(self):
         return f"Value(data={self.data:.4f}, grad={self.grad:.4f})"
-`
+```
 
 每个 Value 存储其数值数据、梯度（初始为零）、一个反向函数以及指向产生它的子节点的指针。
 
 ### 步骤 2：带梯度追踪的算术运算
 
-`python
+```python
     def __add__(self, other):
         other = other if isinstance(other, Value) else Value(other)
         out = Value(self.data + other.data, (self, other), '+')
@@ -220,13 +220,13 @@ class Value:
             self.grad += (1.0 if out.data > 0 else 0.0) * out.grad
         out._backward = _backward
         return out
-`
+```
 
 每个运算创建一个闭包，知道如何计算局部梯度并乘以上游梯度（out.grad）。+= 处理一个值在多个运算中使用的情况。
 
 ### 步骤 3：反向传播
 
-`python
+```python
     def backward(self):
         topo = []
         visited = set()
@@ -241,7 +241,7 @@ class Value:
         self.grad = 1.0
         for v in reversed(topo):
             v._backward()
-`
+```
 
 拓扑排序确保每个节点的梯度在传给其子节点之前已完全计算。种子梯度为 1.0（dy/dy = 1）。
 
@@ -249,7 +249,7 @@ class Value:
 
 基础的 Value 类只支持加法、乘法和 relu。真正的 autograd 引擎需要更多。以下是构建神经网络所需的运算：
 
-`python
+```python
     def __neg__(self):
         return self * -1
 
@@ -300,7 +300,7 @@ class Value:
             self.grad += (1 - t ** 2) * out.grad
         out._backward = _backward
         return out
-`
+```
 
 **各运算的用途：**
 
@@ -319,7 +319,7 @@ class Value:
 
 有了完整的 Value 类，你就能构建神经网络了。不用 PyTorch，不用 NumPy，只有 Value 和链式法则。
 
-`python
+```python
 import random
 
 class Neuron:
@@ -355,13 +355,13 @@ class MLP:
 
     def parameters(self):
         return [p for layer in self.layers for p in layer.parameters()]
-`
+```
 
 一个 Neuron 计算 	anh(w1*x1 + w2*x2 + ... + b)。一个 Layer 是神经元列表。一个 MLP 堆叠层。每个权重都是 Value，所以调用 loss.backward() 会将梯度传播到每个参数。
 
 **在 XOR 上训练：**
 
-`python
+```python
 random.seed(42)
 model = MLP([2, 4, 1])  # 2 输入，4 隐藏神经元，1 输出
 
@@ -386,7 +386,7 @@ for step in range(100):
 print("\n训练后预测：")
 for x, y in zip(xs, ys):
     print(f"  input={x}  target={y:2d}  pred={model(x).data:6.3f}")
-`
+```
 
 这就是 micrograd。纯 Python 中带自动微分的完整神经网络训练循环。每个商业深度学习框架都在大规模上做同样的事情。
 
@@ -394,7 +394,7 @@ for x, y in zip(xs, ys):
 
 如何知道你的 autodiff 是正确的？与数值导数比较。这就是梯度检验。
 
-`python
+```python
 def gradient_check(build_expr, x_val, h=1e-7):
     x = Value(x_val)
     y = build_expr(x)
@@ -407,11 +407,11 @@ def gradient_check(build_expr, x_val, h=1e-7):
 
     diff = abs(autodiff_grad - numerical_grad)
     return autodiff_grad, numerical_grad, diff
-`
+```
 
 在一个复杂表达式上测试：
 
-`python
+```python
 def expr(x):
     return (x ** 3 + x * 2 + 1).tanh()
 
@@ -420,7 +420,7 @@ print(f"Autodiff:  {ad:.8f}")
 print(f"Numerical: {num:.8f}")
 print(f"Difference: {diff:.2e}")
 # 差异应 < 1e-5
-`
+```
 
 梯度检验在实现新运算时至关重要。如果你反向传播有 bug，数值检验会捕获它。每个严肃的深度学习实现在开发期间都运行梯度检验。
 
@@ -435,7 +435,7 @@ print(f"Difference: {diff:.2e}")
 
 ### 步骤 7：与手动计算对比验证
 
-`python
+```python
 x1 = Value(2.0)
 x2 = Value(3.0)
 a = x1 * x2          # a = 6.0
@@ -447,7 +447,7 @@ y.backward()
 print(f"y = {y.data}")          # 7.0
 print(f"dy/dx1 = {x1.grad}")   # 3.0 (= x2)
 print(f"dy/dx2 = {x2.grad}")   # 2.0 (= x1)
-`
+```
 
 手动检验：y = relu(x1*x2 + 1)。由于 x1*x2 + 1 = 7 > 0，relu 是恒等函数。
 dy/dx1 = x2 = 3。dy/dx2 = x1 = 2。引擎结果匹配。
@@ -456,7 +456,7 @@ dy/dx1 = x2 = 3。dy/dx2 = x1 = 2。引擎结果匹配。
 
 ### 与 PyTorch 对比验证
 
-`python
+```python
 import torch
 
 x1 = torch.tensor(2.0, requires_grad=True)
@@ -468,13 +468,13 @@ y.backward()
 
 print(f"PyTorch dy/dx1 = {x1.grad.item()}")  # 3.0
 print(f"PyTorch dy/dx2 = {x2.grad.item()}")  # 2.0
-`
+```
 
 相同的梯度。你的引擎计算出与 PyTorch 相同的结果，因为数学原理相同：通过链式法则的反向模式自动微分。
 
 ### 更复杂的表达式
 
-`python
+```python
 a = Value(2.0)
 b = Value(-3.0)
 c = Value(10.0)
@@ -484,7 +484,7 @@ f.backward()
 print(f"df/da = {a.grad}")  # -3.0 (= b)
 print(f"df/db = {b.grad}")  #  2.0 (= a)
 print(f"df/dc = {c.grad}")  #  1.0
-`
+```
 
 ## 产出物
 
