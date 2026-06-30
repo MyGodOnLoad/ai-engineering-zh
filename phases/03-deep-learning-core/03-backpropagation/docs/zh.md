@@ -49,14 +49,14 @@ source: "[[20 Sources/ai-engineering-from-scratch/phases/03-deep-learning-core/0
 graph LR
     x["x"] --> mul["*"]
     w["w"] --> mul
-    mul -- "z1 = w*x" --> add["+"]
+    mul -->|"z1 = w*x"| add["+"]
     b["b"] --> add
-    add -- "z2 = z1 + b" --> sig["sigmoid"]
-    sig -- "a = sigmoid(z2)" --> loss["Loss"]
+    add -->|"z2 = z1 + b"| sig["sigmoid"]
+    sig -->|"a = sigmoid(z2)"| loss["Loss"]
     y["target"] --> loss
 ```
 
-前向传播：值从左向右流动。x 和 w 产生 z1 = w*x。加上 b 得到 z2。sigmoid 给出激活值 a。用损失函数将 a 与目标比较。
+前向传播：值从左向右流动。x 和 w 产生 z1 = w * x。加上 b 得到 z2。sigmoid 给出激活值 a。用损失函数将 a 与目标比较。
 
 反向传播：梯度从右向左流动。从 dL/da 开始。乘以 da/dz2（sigmoid 导数）。得到 dL/dz2。拆分为 dL/db 和 dL/dz1。然后 dL/dw = dL/dz1 * x，dL/dx = dL/dz1 * w。
 
