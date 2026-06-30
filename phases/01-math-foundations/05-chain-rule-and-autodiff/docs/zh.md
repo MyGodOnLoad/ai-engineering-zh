@@ -8,6 +8,7 @@ type: tutorial
 source: "[[AI Engineering 学习索引]] Phase 1-05"
 related:
   - "[[Value 类与 Autograd 引擎]]"
+  - "[[ReLU（修正线性单元）]]"
 ---
 
 # 链式法则与自动微分
@@ -37,44 +38,46 @@ related:
 
 ### 链式法则
 
-如果 y = f(g(x))，则 y 对 x 的导数为：
+如果 `y = f(g(x))`，则 `y` 对 `x` 的导数为：
 
-`
+```
 dy/dx = dy/dg * dg/dx = f'(g(x)) * g'(x)
-`
+```
 
 沿链条相乘导数。每个环节贡献其局部导数。
 
-示例：y = sin(x^2)
+示例：`y = sin(x^2)`
 
-`
+```
 g(x) = x^2       g'(x) = 2x
 f(g) = sin(g)     f'(g) = cos(g)
 
 dy/dx = cos(x^2) * 2x
-`
+```
 
 对于更深的复合，链条延伸：
 
-`
+```
 y = f(g(h(x)))
 
 dy/dx = f'(g(h(x))) * g'(h(x)) * h'(x)
-`
+```
 
 神经网络中的每一层都是这条链条上的一环。
 
 ### 计算图
 
 计算图将链式法则可视化。每个运算成为一个节点。数据前向流过图，梯度反向流过图。
+> [!note]- ReLU（修正线性单元）
+> ![[ReLU（修正线性单元）]]
 
 **前向传播（计算值）：**
 
 ```mermaid
 graph TD
-    x1["x1 = 2"] --> mul["* （乘法）"]
+    x1["x1 = 2"] --> mul["\* （乘法）"]
     x2["x2 = 3"] --> mul
-    mul -->|"a = 6"| add["+ （加法）"]
+    mul -->|"a = 6"| add["\+ （加法）"]
     b["b = 1"] --> add
     add -->|"c = 7"| relu["relu"]
     relu -->|"y = 7"| y["输出 y"]
@@ -92,43 +95,45 @@ graph TD
 ```
 
 反向传播在每个节点应用链式法则，将梯度从输出传播回输入。
+>[!note]-  反向传播计算流程
+>![[反向传播计算流程.md]]
 
 ### 前向模式 vs 反向模式
 
 有两种方式通过图应用链式法则。
 
-**前向模式**从输入开始，向前推送导数。它计算 dx/dx = 1 并通过每个运算传播。适合输入少、输出多的情况。
+**前向模式**从输入开始，向前推送导数。它计算 `dx/dx = 1` 并通过每个运算传播。适合输入少、输出多的情况。
 
-`
+```
 前向模式：种子 dx/dx = 1，向前传播
 
   x = 2       (dx/dx = 1)
   a = x^2     (da/dx = 2x = 4)
   y = sin(a)  (dy/dx = cos(a) * da/dx = cos(4) * 4 = -2.615)
-`
+```
 
-**反向模式**从输出开始，向后拉取梯度。它计算 dy/dy = 1 并按相反顺序通过每个运算传播。适合输入多、输出少的情况。
+**反向模式**从输出开始，向后拉取梯度。它计算 `dy/dy = 1` 并按相反顺序通过每个运算传播。适合输入多、输出少的情况。
 
-`
+```
 反向模式：种子 dy/dy = 1，向后传播
 
   y = sin(a)  (dy/dy = 1)
   a = x^2     (dy/da = cos(a) = cos(4) = -0.654)
   x = 2       (dy/dx = dy/da * da/dx = -0.654 * 4 = -2.615)
-`
+```
 
 神经网络有百万级输入（权重）和一个输出（损失）。反向模式在**一次**反向传播中计算所有梯度。这就是为什么反向传播使用反向模式。
 
 | 模式 | 种子 | 方向 | 最适合 |
 |------|------|------|--------|
-| 前向 | dx_i/dx_i = 1 | 输入到输出 | 少输入，多输出 |
-| 反向 | dy/dy = 1 | 输出到输入 | 多输入，少输出（神经网络） |
+| 前向 | `dx_i/dx_i = 1` | 输入到输出 | 少输入，多输出 |
+| 反向 | `dy/dy = 1` | 输出到输入 | 多输入，少输出（神经网络） |
 
 ### 对偶数实现前向模式
 
-前向模式可以用对偶数优雅地实现。对偶数形式为  + b*epsilon，其中 psilon^2 = 0。
+前向模式可以用[对偶数（Dual Numbers）](对偶数（Dual%20Numbers）.md)优雅地实现。对偶数形式为 `a + b*epsilon`，其中 `epsilon^2 = 0`。
 
-`
+```
 对偶数：(值, 导数)
 
 (2, 1) 表示：值为 2，对 x 的导数为 1
@@ -137,7 +142,7 @@ graph TD
   (a, a') + (b, b') = (a+b, a'+b')
   (a, a') * (b, b') = (a*b, a'*b + a*b')
   sin(a, a')         = (sin(a), cos(a)*a')
-`
+```
 
 给输入变量种下导数 1，导数自动通过每个运算传播。
 
@@ -149,11 +154,9 @@ autograd 引擎需要三样东西：
 2. **图记录。** 每个运算记录其输入和局部梯度函数。
 3. **反向传播。** 对图进行拓扑排序，然后反向遍历，在每个节点应用链式法则。
 
-这正是 PyTorch 的 utograd 所做的。	orch.Tensor 类包装值，在 
-equires_grad=True 时记录运算，在调用 .backward() 时计算梯度。
+这正是 PyTorch 的 `autograd` 所做的。`torch.Tensor` 类包装值，在 `requires_grad=True` 时记录运算，在调用 `.backward()` 时计算梯度。
 
 ### PyTorch Autograd 底层工作原理
-
 当你写 PyTorch 代码时：
 
 ```python
@@ -163,14 +166,12 @@ y.backward()
 print(x.grad)  # 7.0 = 2*x + 3 = 2*2 + 3
 ```
 
-PyTorch 内部：
-
-1. 为 x 创建一个 Tensor 节点，
-equires_grad=True
-2. 每个运算（**、*、+）创建一个新节点并记录反向函数
-3. y.backward() 通过记录的图触发反向模式自动微分
-4. 每个节点的 grad_fn 计算局部梯度并传给父节点
-5. 梯度通过加法（不是替换）累积在 .grad 属性中
+[PyTorch 内部](PyTorch%20Tensor%20工作流程.md):
+1. 为 `x` 创建一个 `Tensor` 节点，`requires_grad=True`
+2. 每个运算（`**`、`*`、`+`）创建一个新节点并记录反向函数
+3. `y.backward()` 通过记录的图触发反向模式自动微分
+4. 每个节点的 `grad_fn` 计算局部梯度并传给父节点
+5. 梯度通过加法（不是替换）累积在 `.grad` 属性中
 
 图是动态的（define-by-run）。每次前向传播都构建一个新图。这就是 PyTorch 支持模型内部控制流（if/else、循环）的原因。
 
@@ -222,7 +223,7 @@ class Value:
         return out
 ```
 
-每个运算创建一个闭包，知道如何计算局部梯度并乘以上游梯度（out.grad）。+= 处理一个值在多个运算中使用的情况。
+每个运算创建一个闭包，知道如何计算局部梯度并乘以上游梯度（`out.grad`）。`+=` 处理一个值在多个运算中使用的情况。
 
 ### 步骤 3：反向传播
 
@@ -306,14 +307,14 @@ class Value:
 
 | 运算 | 反向规则 | 用途 |
 |------|---------|------|
-| __sub__ | 复用 add + neg | 损失计算 (pred - target) |
-| __pow__ | n * x^(n-1) | 多项式激活、MSE (error^2) |
-| __truediv__ | 复用 mul + pow(-1) | 归一化、学习率缩放 |
-| xp | exp(x) * upstream | Softmax、对数似然 |
-| log | (1/x) * upstream | 交叉熵损失、对数概率 |
-| 	anh | (1 - tanh^2) * upstream | 经典激活函数 |
+| `__sub__` | 复用 add + neg | 损失计算 (pred - target) |
+| `__pow__` | n * x^(n-1) | 多项式激活、MSE (error^2) |
+| `__truediv__` | 复用 mul + pow(-1) | 归一化、学习率缩放 |
+| `exp` | exp(x) * upstream | Softmax、对数似然 |
+| `log` | (1/x) * upstream | 交叉熵损失、对数概率 |
+| `tanh` | (1 - tanh^2) * upstream | 经典激活函数 |
 
-巧妙之处：__sub__ 和 __truediv__ 用已有运算定义，它们自动获得正确的梯度，因为链式法则通过底层的 add/mul/pow 运算复合。
+巧妙之处：`__sub__` 和 `__truediv__` 用已有运算定义，它们自动获得正确的梯度，因为链式法则通过底层的 add/mul/pow 运算复合。
 
 ### 步骤 5：从零构建迷你 MLP
 
@@ -357,7 +358,7 @@ class MLP:
         return [p for layer in self.layers for p in layer.parameters()]
 ```
 
-一个 Neuron 计算 	anh(w1*x1 + w2*x2 + ... + b)。一个 Layer 是神经元列表。一个 MLP 堆叠层。每个权重都是 Value，所以调用 loss.backward() 会将梯度传播到每个参数。
+一个 `Neuron` 计算 `tanh(w1*x1 + w2*x2 + ... + b)`。一个 `Layer` 是神经元列表。一个 `MLP` 堆叠层。每个权重都是 `Value`，所以调用 `loss.backward()` 会将梯度传播到每个参数。
 
 **在 XOR 上训练：**
 
@@ -449,8 +450,8 @@ print(f"dy/dx1 = {x1.grad}")   # 3.0 (= x2)
 print(f"dy/dx2 = {x2.grad}")   # 2.0 (= x1)
 ```
 
-手动检验：y = relu(x1*x2 + 1)。由于 x1*x2 + 1 = 7 > 0，relu 是恒等函数。
-dy/dx1 = x2 = 3。dy/dx2 = x1 = 2。引擎结果匹配。
+手动检验：`y = relu(x1*x2 + 1)`。由于 `x1*x2 + 1 = 7 > 0`，relu 是恒等函数。
+`dy/dx1 = x2 = 3`。`dy/dx2 = x1 = 2`。引擎结果匹配。
 
 ## 使用 PyTorch
 
@@ -489,20 +490,20 @@ print(f"df/dc = {c.grad}")  #  1.0
 ## 产出物
 
 本课产生：
-- outputs/skill-autodiff.md —— 构建和调试 autograd 系统的 skill
-- code/autodiff.py —— 一个可扩展的最小 autograd 引擎
+- `outputs/skill-autodiff.md` —— 构建和调试 autograd 系统的 skill
+- `code/autodiff.py` —— 一个可扩展的最小 autograd 引擎
 
-这里构建的 Value 类是 Phase 3 中神经网络训练循环的基础。
+这里构建的 `Value` 类是 Phase 3 中神经网络训练循环的基础。
 
 ## 练习
 
-1. 为 Value 类添加 __pow__，计算 x ** n。验证 d/dx(x^3) 在 x=2 处等于 12.0。
+1. 为 `Value` 类添加 `__pow__`，计算 `x ** n`。验证 `d/dx(x^3)` 在 `x=2` 处等于 `12.0`。
 
-2. 添加 	anh 作为激活函数。验证 	anh'(0) = 1 和 	anh'(2) ≈ 0.0707。
+2. 添加 `tanh` 作为激活函数。验证 `tanh'(0) = 1` 和 `tanh'(2) ≈ 0.0707`。
 
-3. 为单个神经元构建计算图：y = relu(w1*x1 + w2*x2 + b)。计算全部五个梯度并与 PyTorch 对比验证。
+3. 为单个神经元构建计算图：`y = relu(w1*x1 + w2*x2 + b)`。计算全部五个梯度并与 PyTorch 对比验证。
 
-4. 使用对偶数实现前向模式自动微分。创建 Dual 类并验证它给出与反向模式引擎相同的导数。
+4. 使用对偶数实现前向模式自动微分。创建 `Dual` 类并验证它给出与反向模式引擎相同的导数。
 
 ## 关键术语
 
