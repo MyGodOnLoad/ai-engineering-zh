@@ -47,9 +47,9 @@ source: "[[20 Sources/ai-engineering-from-scratch/phases/03-deep-learning-core/0
 
 ```mermaid
 graph LR
-    x["x"] --> mul["*"]
+    x["x"] --> mul["\*"]
     w["w"] --> mul
-    mul -->|"z1 = w*x"| add["+"]
+    mul -->|"z1 = w*x"| add["\+"]
     b["b"] --> add
     add -->|"z2 = z1 + b"| sig["sigmoid"]
     sig -->|"a = sigmoid(z2)"| loss["Loss"]

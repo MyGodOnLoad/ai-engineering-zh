@@ -6,6 +6,8 @@ modified: 2026-06-30
 category: 00-Inbox/10-Projects
 type: tutorial
 source: "[[AI Engineering 学习索引]] Phase 1-05"
+related:
+  - "[[Value 类与 Autograd 引擎]]"
 ---
 
 # 链式法则与自动微分
